@@ -109,6 +109,7 @@ async function waitForOBS(connectionSettings: ConnectionSettings): Promise<OBSWe
 }
 
 async function main() {
+    console.log('Running Valorant AutoRecord v1.1.1\n')
     const config = await loadConfig()
 
     // Try connecting to OBS
