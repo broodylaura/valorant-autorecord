@@ -9,7 +9,7 @@ import {
     ValorantExternalSessionsResponse, ValorantMatchData,
     ValorantWebsocketEvent
 } from './valorantTypes'
-import {Config, ConnectionSettings, loadConfig} from './config.js'
+import {ConnectionSettings, loadConfig} from './config.js'
 import {WebSocket} from 'ws'
 import {promises as fs} from 'node:fs'
 import path from 'node:path'
@@ -38,7 +38,7 @@ const clientPlatform = 'ew0KCSJwbGF0Zm9ybVR5cGUiOiAiUEMiLA0KCSJwbGF0Zm9ybU9TIjog
 const requestDelay = 5 * 1000
 const authenticationConnectionError = 4009
 
-let gameVersion: string | null = null
+let cachedGameVersion: string | null = null
 let mapData: MapDataResponse | null = null
 let agentData: AgentDataResponse | null = null
 
@@ -48,18 +48,23 @@ let previousGameID: string | null = null
 let dataDir: string | null = null
 let websocketEvents: ValorantWebsocketEvent[] = []
 
-async function loadPlayerData(val: ValorantAPI, dataDir: string, puuids: string[], ownPuuid: string, shard: string) {
+async function loadGameVersion(val: ValorantAPI, ownPuuid: string) {
     // Load game version if not already loaded
-    if(gameVersion === null) {
+    if(cachedGameVersion === null) {
         const presences = (await val.getPresences()).presences
         const ownPresence = presences.find(presence => presence.puuid === ownPuuid)
         if(ownPresence === undefined) {
-            console.warn('Own presence data was not found')
+            throw new Error('Own presence data was not found')
         } else {
             const privateData = JSON.parse(Buffer.from(ownPresence.private, 'base64').toString('utf-8')) as PrivatePresence
-            gameVersion = privateData.partyClientVersion
+            cachedGameVersion = privateData.partyClientVersion
         }
     }
+    return cachedGameVersion
+}
+
+async function loadPlayerData(val: ValorantAPI, dataDir: string, puuids: string[], ownPuuid: string, shard: string) {
+    const gameVersion = await loadGameVersion(val, ownPuuid)
 
     // MMR and match history
     const mmrPath = path.join(dataDir, 'mmr')
@@ -77,7 +82,10 @@ async function loadPlayerData(val: ValorantAPI, dataDir: string, puuids: string[
         await fs.writeFile(path.join(mmrPath, `${puuid}.json`), JSON.stringify(mmrData), 'utf-8')
 
         await asyncTimeout(requestDelay)
-        const matchHistoryData = await val.requestRemotePD(`match-history/v1/history/${puuid}?endIndex=25`, shard)
+        const matchHistoryData = await val.requestRemotePD(`match-history/v1/history/${puuid}?endIndex=25`, shard, {
+            'X-Riot-ClientPlatform': clientPlatform,
+            'X-Riot-ClientVersion': gameVersion
+        })
         await fs.writeFile(path.join(matchHistoryPath, `${puuid}.json`), JSON.stringify(matchHistoryData), 'utf-8')
     }
 }
@@ -192,7 +200,11 @@ async function main() {
 
                         await asyncTimeout(requestDelay)
                         console.log('Getting match data')
-                        const matchData = await val.requestRemotePD<ValorantMatchData>(`match-details/v1/matches/${gameID}`, initData.shard)
+                        const gameVersion = loadGameVersion(val, chatSession.puuid)
+                        const matchData = await val.requestRemotePD<ValorantMatchData>(`match-details/v1/matches/${gameID}`, initData.shard, {
+                            'X-Riot-ClientPlatform': clientPlatform,
+                            'X-Riot-ClientVersion': gameVersion
+                        })
 
                         // Rename output file with match data
                         if(outputPath !== null) {
@@ -266,10 +278,17 @@ async function main() {
                                 }
                                 await asyncTimeout(15 * 1000)
                                 console.log('Getting coregame and loadout data')
-                                const coreGameData = await val.requestRemoteGLZ<CoregameMatchData>(`core-game/v1/matches/${gameID}`, initData.region, initData.shard)
+                                const gameVersion = loadGameVersion(val, chatSession.puuid)
+                                const coreGameData = await val.requestRemoteGLZ<CoregameMatchData>(`core-game/v1/matches/${gameID}`, initData.region, initData.shard, {
+                                    'X-Riot-ClientPlatform': clientPlatform,
+                                    'X-Riot-ClientVersion': gameVersion
+                                })
                                 await fs.writeFile(path.join(dataDir, 'coregame-match.json'), JSON.stringify(coreGameData), 'utf-8')
                                 await asyncTimeout(requestDelay)
-                                const loadoutsData = await val.requestRemoteGLZ(`core-game/v1/matches/${gameID}/loadouts`, initData.region, initData.shard)
+                                const loadoutsData = await val.requestRemoteGLZ(`core-game/v1/matches/${gameID}/loadouts`, initData.region, initData.shard, {
+                                    'X-Riot-ClientPlatform': clientPlatform,
+                                    'X-Riot-ClientVersion': gameVersion
+                                })
                                 await fs.writeFile(path.join(dataDir, 'loadouts.json'), JSON.stringify(loadoutsData), 'utf-8')
 
                                 const puuids = coreGameData.Players.map(player => player.Subject)
@@ -296,7 +315,11 @@ async function main() {
 
                             // Get pre-game match data
                             console.log('Getting pregame data')
-                            const pregameMatchData: PregameMatchData = await val.requestRemoteGLZ(`pregame/v1/matches/${preGameID}`, initData.region, initData.shard)
+                            const gameVersion = loadGameVersion(val, chatSession.puuid)
+                            const pregameMatchData: PregameMatchData = await val.requestRemoteGLZ(`pregame/v1/matches/${preGameID}`, initData.region, initData.shard, {
+                                'X-Riot-ClientPlatform': clientPlatform,
+                                'X-Riot-ClientVersion': gameVersion
+                            })
                             await fs.writeFile(path.join(dataDir, 'pregame-match.json'), JSON.stringify(pregameMatchData), 'utf-8')
                         }
                     }
