@@ -38,7 +38,7 @@ const ciServerVersionRegex = /LogShooter: Display: CI server version: (?<version
 const branchRegex = /LogShooter: Display: Branch: (?<branch>.+)/
 const changeListRegex = /LogShooter: Display: Changelist: (?<changelist>.+)/
 const buildVersionRegex = /LogShooter: Display: Build version: (?<buildVersion>.+)/
-const sessionAPICallRegex = /\[GET https:\/\/glz-(?<region>.+?)-1.(?<shard>.+?).a.pvp.net\/session\/v1\/sessions\/(?<puuid>.+?)\/reconnect]/
+const pregameAPICallRegex = /\[GET https:\/\/glz-(?<region>.+?)-1.(?<shard>.+?).a.pvp.net\/pregame\/v1\/players\/(?<puuid>.+?)]/
 
 const localAgent = new https.Agent({
     rejectUnauthorized: false
@@ -268,7 +268,7 @@ export class ValorantAPI extends EE<ValorantAPIEvents> {
                 }
 
                 if(shard === undefined) {
-                    const match = sessionAPICallRegex.exec(line)
+                    const match = pregameAPICallRegex.exec(line)
                     if(match) {
                         shard = match.groups?.shard || ''
                         region = match.groups?.region || ''
