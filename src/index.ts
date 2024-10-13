@@ -16,7 +16,6 @@ import path from 'node:path'
 import Mustache from 'mustache'
 import fetch from 'node-fetch'
 import {run} from './util/run.js'
-import ini from 'ini'
 
 // @ts-ignore
 Mustache.escape! = v => v
@@ -121,23 +120,23 @@ async function main() {
             if(config.obs.connection !== undefined) return config.obs.connection
 
             // Otherwise, try to get them from the OBS config file
-            const obsConfigPath = path.join(process.env['APPDATA']!, 'obs-studio', 'global.ini')
+            const obsConfigPath = path.join(process.env['APPDATA']!, 'obs-studio', 'plugin_config', 'obs-websocket', 'config.json')
             try {
-                const obsConfig = ini.parse(await fs.readFile(obsConfigPath, 'utf-8'))
-                const obsWebsocketConfig = obsConfig['OBSWebSocket'] as {
-                    ServerEnabled: boolean
-                    ServerPort: string
-                    ServerPassword: string
+                const obsConfig = JSON.parse(await fs.readFile(obsConfigPath, 'utf-8'))
+                const obsWebsocketConfig = obsConfig as {
+                    server_enabled: boolean
+                    server_port: string
+                    server_password: string
                 }
 
-                if(!obsWebsocketConfig.ServerEnabled) {
+                if(!obsWebsocketConfig.server_enabled) {
                     console.log('\n⚠️ OBS WebSocket server is not enabled!\n\n\tTo enable it, go to Tools > WebSockets Server Settings\n\tand check "Enable WebSocket server" then click "OK"\n')
                 }
 
                 return {
                     ip: '127.0.0.1',
-                    port: parseInt(obsWebsocketConfig.ServerPort),
-                    password: obsWebsocketConfig.ServerPassword
+                    port: parseInt(obsWebsocketConfig.server_port),
+                    password: obsWebsocketConfig.server_password
                 }
             } catch(e) {
                 throw new Error(`Failed to get OBS connection settings from ${obsConfigPath}, error: ${e}`)
